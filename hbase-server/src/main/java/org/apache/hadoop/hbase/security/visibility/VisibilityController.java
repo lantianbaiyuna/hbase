@@ -40,8 +40,6 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseInterfaceAudience;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Tag;
@@ -208,23 +206,20 @@ public class VisibilityController implements MasterCoprocessor, RegionCoprocesso
   /********************************* Master related hooks **********************************/
 
   @Override
-  public void postStartMaster(ObserverContext<MasterCoprocessorEnvironment> ctx) throws IOException {
+  public void postStartMaster(ObserverContext<MasterCoprocessorEnvironment> ctx)
+    throws IOException {
     // Need to create the new system table for labels here
-    if (!MetaTableAccessor.tableExists(ctx.getEnvironment().getConnection(), LABELS_TABLE_NAME)) {
-      TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-        new TableDescriptorBuilder.ModifyableTableDescriptor(LABELS_TABLE_NAME);
-      ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor familyDescriptor =
-        new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(LABELS_TABLE_FAMILY);
-      familyDescriptor.setBloomFilterType(BloomType.NONE);
-      // We will cache all the labels. No need of normal
-      // table block cache.
-      familyDescriptor.setBlockCacheEnabled(false);
-      tableDescriptor.setColumnFamily(familyDescriptor);
-      // Let the "labels" table having only one region always. We are not expecting too many labels in
-      // the system.
-      tableDescriptor.setValue(HTableDescriptor.SPLIT_POLICY,
-          DisabledRegionSplitPolicy.class.getName());
-      try (Admin admin = ctx.getEnvironment().getConnection().getAdmin()) {
+    try (Admin admin = ctx.getEnvironment().getConnection().getAdmin()) {
+      if (!admin.tableExists(LABELS_TABLE_NAME)) {
+        // We will cache all the labels. No need of normal table block cache.
+        // Let the "labels" table having only one region always. We are not expecting too many
+        // labels in the system.
+        TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(LABELS_TABLE_NAME)
+          .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(LABELS_TABLE_FAMILY)
+            .setBloomFilterType(BloomType.NONE).setBlockCacheEnabled(false).build())
+          .setValue(TableDescriptorBuilder.SPLIT_POLICY, DisabledRegionSplitPolicy.class.getName())
+          .build();
+
         admin.createTable(tableDescriptor);
       }
     }

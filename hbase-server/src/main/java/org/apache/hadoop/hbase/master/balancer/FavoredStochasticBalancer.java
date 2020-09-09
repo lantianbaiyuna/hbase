@@ -65,7 +65,7 @@ import org.apache.hbase.thirdparty.com.google.common.collect.Sets;
  * RegionServer as the new Primary RegionServer) after a region is recovered. This
  * should help provide consistent read latencies for the regions even when their
  * primary region servers die. This provides two
- * {@link org.apache.hadoop.hbase.master.balancer.StochasticLoadBalancer.CandidateGenerator}
+ * {@link CandidateGenerator}
  *
  */
 @InterfaceAudience.Private
@@ -597,8 +597,8 @@ public class FavoredStochasticBalancer extends StochasticLoadBalancer implements
         int currentServer) {
       List<Integer> fnIndex = new ArrayList<>();
       for (ServerName sn : favoredNodes) {
-        if (cluster.serversToIndex.containsKey(sn.getHostAndPort())) {
-          fnIndex.add(cluster.serversToIndex.get(sn.getHostAndPort()));
+        if (cluster.serversToIndex.containsKey(sn.getAddress())) {
+          fnIndex.add(cluster.serversToIndex.get(sn.getAddress()));
         }
       }
       float locality = 0;
@@ -661,8 +661,8 @@ public class FavoredStochasticBalancer extends StochasticLoadBalancer implements
         int currentServerIndex) {
       List<Integer> fnIndex = new ArrayList<>();
       for (ServerName sn : favoredNodes) {
-        if (cluster.serversToIndex.containsKey(sn.getHostAndPort())) {
-          fnIndex.add(cluster.serversToIndex.get(sn.getHostAndPort()));
+        if (cluster.serversToIndex.containsKey(sn.getAddress())) {
+          fnIndex.add(cluster.serversToIndex.get(sn.getAddress()));
         }
       }
       int leastLoadedFN = -1;

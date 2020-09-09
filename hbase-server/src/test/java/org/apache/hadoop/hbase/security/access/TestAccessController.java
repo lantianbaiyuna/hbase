@@ -44,9 +44,7 @@ import org.apache.hadoop.hbase.HBaseClassTestRule;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
@@ -65,12 +63,14 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.MasterSwitchType;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.SnapshotDescription;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.security.SecurityCapability;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
@@ -281,13 +281,10 @@ public class TestAccessController extends SecureTestUtil {
   }
 
   private static void setUpTableAndUserPermissions() throws Exception {
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(TEST_TABLE);
-    ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor familyDescriptor =
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(TEST_FAMILY);
-    familyDescriptor.setMaxVersions(100);
-    tableDescriptor.setColumnFamily(familyDescriptor);
-    tableDescriptor.setOwner(USER_OWNER);
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(TEST_TABLE)
+      .setColumnFamily(
+        ColumnFamilyDescriptorBuilder.newBuilder(TEST_FAMILY).setMaxVersions(100).build())
+      .setOwner(USER_OWNER).build();
     createTable(TEST_UTIL, tableDescriptor, new byte[][] { Bytes.toBytes("s") });
 
     HRegion region = TEST_UTIL.getHBaseCluster().getRegions(TEST_TABLE).get(0);
@@ -395,11 +392,9 @@ public class TestAccessController extends SecureTestUtil {
     AccessTestAction createTable = new AccessTestAction() {
       @Override
       public Object run() throws Exception {
-        TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-          new TableDescriptorBuilder.ModifyableTableDescriptor(
-            TableName.valueOf(name.getMethodName()));
-        tableDescriptor.setColumnFamily(
-          new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(TEST_FAMILY));
+        TableDescriptor tableDescriptor =
+          TableDescriptorBuilder.newBuilder(TableName.valueOf(name.getMethodName()))
+            .setColumnFamily(ColumnFamilyDescriptorBuilder.of(TEST_FAMILY)).build();
         ACCESS_CONTROLLER.preCreateTable(ObserverContextImpl.createAndPrepare(CP_ENV),
           tableDescriptor, null);
         return null;
@@ -407,11 +402,11 @@ public class TestAccessController extends SecureTestUtil {
     };
 
     // verify that superuser can create tables
-    verifyAllowed(createTable, SUPERUSER, USER_ADMIN, USER_GROUP_CREATE);
+    verifyAllowed(createTable, SUPERUSER, USER_ADMIN, USER_GROUP_CREATE, USER_GROUP_ADMIN);
 
     // all others should be denied
-    verifyDenied(createTable, USER_CREATE, USER_RW, USER_RO, USER_NONE, USER_GROUP_ADMIN,
-      USER_GROUP_READ, USER_GROUP_WRITE);
+    verifyDenied(createTable, USER_CREATE, USER_RW, USER_RO, USER_NONE, USER_GROUP_READ,
+      USER_GROUP_WRITE);
   }
 
   @Test
@@ -1015,9 +1010,8 @@ public class TestAccessController extends SecureTestUtil {
       // User performing bulk loads must have privilege to read table metadata
       // (ADMIN or CREATE)
       verifyAllowed(bulkLoadAction, SUPERUSER, USER_ADMIN, USER_OWNER, USER_CREATE,
-        USER_GROUP_CREATE);
-      verifyDenied(bulkLoadAction, USER_RW, USER_NONE, USER_RO, USER_GROUP_READ, USER_GROUP_WRITE,
-        USER_GROUP_ADMIN);
+        USER_GROUP_CREATE, USER_GROUP_ADMIN);
+      verifyDenied(bulkLoadAction, USER_RW, USER_NONE, USER_RO, USER_GROUP_READ, USER_GROUP_WRITE);
     } finally {
       // Reinit after the bulk upload
       TEST_UTIL.getAdmin().disableTable(TEST_TABLE);
@@ -1318,12 +1312,9 @@ public class TestAccessController extends SecureTestUtil {
     if (admin.tableExists(tableName)) {
       deleteTable(TEST_UTIL, tableName);
     }
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(tableName);
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family1));
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family2));
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(tableName)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family1))
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family2)).build();
     createTable(TEST_UTIL, tableDescriptor);
     try {
       // create temp users
@@ -1574,12 +1565,9 @@ public class TestAccessController extends SecureTestUtil {
     if (admin.tableExists(tableName)) {
       deleteTable(TEST_UTIL, tableName);
     }
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(tableName);
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family1));
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family2));
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(tableName)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family1))
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family2)).build();
     createTable(TEST_UTIL, tableDescriptor);
 
     try {
@@ -1680,13 +1668,9 @@ public class TestAccessController extends SecureTestUtil {
     if (admin.tableExists(tableName)) {
       deleteTable(TEST_UTIL, tableName);
     }
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(tableName);
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family1));
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family2));
-    tableDescriptor.setOwner(USER_OWNER);
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(tableName)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family1))
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family2)).setOwner(USER_OWNER).build();
     createTable(TEST_UTIL, tableDescriptor);
     try {
       List<UserPermission> perms =
@@ -1744,7 +1728,8 @@ public class TestAccessController extends SecureTestUtil {
       admin.disableTable(tableName);
 
       User newOwner = User.createUserForTesting(conf, "new_owner", new String[] {});
-      tableDescriptor.setOwner(newOwner);
+      tableDescriptor =
+        TableDescriptorBuilder.newBuilder(tableDescriptor).setOwner(newOwner).build();
       admin.modifyTable(tableDescriptor);
 
       perms = admin.getUserPermissions(GetUserPermissionsRequest.newBuilder(tableName).build());
@@ -2016,7 +2001,7 @@ public class TestAccessController extends SecureTestUtil {
   @Test
   public void testSnapshot() throws Exception {
     Admin admin = TEST_UTIL.getAdmin();
-    final HTableDescriptor htd = new HTableDescriptor(admin.getDescriptor(TEST_TABLE));
+    final TableDescriptor htd = admin.getDescriptor(TEST_TABLE);
     final SnapshotDescription snapshot = new SnapshotDescription(
         TEST_TABLE.getNameAsString() + "-snapshot", TEST_TABLE);
     AccessTestAction snapshotAction = new AccessTestAction() {
@@ -2075,7 +2060,7 @@ public class TestAccessController extends SecureTestUtil {
   @Test
   public void testSnapshotWithOwner() throws Exception {
     Admin admin = TEST_UTIL.getAdmin();
-    final HTableDescriptor htd = new HTableDescriptor(admin.getDescriptor(TEST_TABLE));
+    final TableDescriptor htd = admin.getDescriptor(TEST_TABLE);
     final SnapshotDescription snapshot = new SnapshotDescription(
         TEST_TABLE.getNameAsString() + "-snapshot", TEST_TABLE, null, USER_OWNER.getName());
 
@@ -2134,10 +2119,8 @@ public class TestAccessController extends SecureTestUtil {
     MiniHBaseCluster hbaseCluster = TEST_UTIL.getHBaseCluster();
 
     final Admin admin = TEST_UTIL.getAdmin();
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(TEST_TABLE2);
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(TEST_FAMILY));
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(TEST_TABLE2)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(TEST_FAMILY)).build();
     createTable(TEST_UTIL, tableDescriptor);
 
     // Starting a new RegionServer.
@@ -2293,13 +2276,9 @@ public class TestAccessController extends SecureTestUtil {
   }
 
   private void createTestTable(TableName tname, byte[] cf) throws Exception {
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(tname);
-    ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor hcd =
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(cf);
-    hcd.setMaxVersions(100);
-    tableDescriptor.setColumnFamily(hcd);
-    tableDescriptor.setOwner(USER_OWNER);
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(tname)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(cf).setMaxVersions(100).build())
+      .setOwner(USER_OWNER).build();
     createTable(TEST_UTIL, tableDescriptor, new byte[][] { Bytes.toBytes("s") });
   }
 
@@ -2864,11 +2843,8 @@ public class TestAccessController extends SecureTestUtil {
     final byte[] family = Bytes.toBytes("f1");
 
     // create table in default ns
-    Admin admin = TEST_UTIL.getAdmin();
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(table1);
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family));
+    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(table1)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family)).build();
     createTable(TEST_UTIL, tableDescriptor);
 
     // creating the ns and table in it
@@ -2876,9 +2852,8 @@ public class TestAccessController extends SecureTestUtil {
     NamespaceDescriptor desc = NamespaceDescriptor.create(ns).build();
     final TableName table2 = TableName.valueOf(ns, tableName);
     createNamespace(TEST_UTIL, desc);
-    tableDescriptor = new TableDescriptorBuilder.ModifyableTableDescriptor(table2);
-    tableDescriptor.setColumnFamily(
-      new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family));
+    tableDescriptor = TableDescriptorBuilder.newBuilder(table2)
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family)).build();
     createTable(TEST_UTIL, tableDescriptor);
 
     // Verify that we can read sys-tables
@@ -2909,9 +2884,8 @@ public class TestAccessController extends SecureTestUtil {
 
   private void verifyAnyCreate(AccessTestAction action) throws Exception {
     verifyAllowed(action, SUPERUSER, USER_ADMIN, USER_OWNER, USER_CREATE, USER_ADMIN_CF,
-      USER_GROUP_CREATE);
-    verifyDenied(action, USER_NONE, USER_RO, USER_RW, USER_GROUP_READ, USER_GROUP_WRITE,
-      USER_GROUP_ADMIN);
+      USER_GROUP_CREATE, USER_GROUP_ADMIN);
+    verifyDenied(action, USER_NONE, USER_RO, USER_RW, USER_GROUP_READ, USER_GROUP_WRITE);
   }
 
   @Test
@@ -3074,7 +3048,7 @@ public class TestAccessController extends SecureTestUtil {
   public void testRemoteLocks() throws Exception {
     String namespace = "preQueueNs";
     final TableName tableName = TableName.valueOf(namespace, name.getMethodName());
-    HRegionInfo[] regionInfos = new HRegionInfo[] {new HRegionInfo(tableName)};
+    RegionInfo[] regionInfos = new RegionInfo[] { RegionInfoBuilder.newBuilder(tableName).build() };
 
     // Setup Users
     // User will be granted ADMIN and CREATE on namespace. Should be denied before grant.

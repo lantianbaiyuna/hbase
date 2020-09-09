@@ -245,8 +245,18 @@ class AdminOverAsyncAdmin implements Admin {
   }
 
   @Override
+  public void flush(TableName tableName, byte[] columnFamily) throws IOException {
+    get(admin.flush(tableName, columnFamily));
+  }
+
+  @Override
   public void flushRegion(byte[] regionName) throws IOException {
     get(admin.flushRegion(regionName));
+  }
+
+  @Override
+  public void flushRegion(byte[] regionName, byte[] columnFamily) throws IOException {
+    get(admin.flushRegion(regionName, columnFamily));
   }
 
   @Override
@@ -385,8 +395,8 @@ class AdminOverAsyncAdmin implements Admin {
   }
 
   @Override
-  public boolean normalize() throws IOException {
-    return get(admin.normalize());
+  public boolean normalize(NormalizeTableFilterParams ntfp) throws IOException {
+    return get(admin.normalize(ntfp));
   }
 
   @Override
@@ -1035,5 +1045,16 @@ class AdminOverAsyncAdmin implements Admin {
   @Override
   public void setRSGroup(Set<TableName> tables, String groupName) throws IOException {
     get(admin.setRSGroup(tables, groupName));
+  }
+
+  @Override
+  public void renameRSGroup(String oldName, String newName) throws IOException {
+    get(admin.renameRSGroup(oldName, newName));
+  }
+
+  @Override
+  public void updateRSGroupConfig(String groupName, Map<String, String> configuration)
+      throws IOException {
+    get(admin.updateRSGroupConfig(groupName, configuration));
   }
 }

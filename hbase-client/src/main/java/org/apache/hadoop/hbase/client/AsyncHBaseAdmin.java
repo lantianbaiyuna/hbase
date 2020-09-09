@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -244,8 +244,18 @@ class AsyncHBaseAdmin implements AsyncAdmin {
   }
 
   @Override
+  public CompletableFuture<Void> flush(TableName tableName, byte[] columnFamily) {
+    return wrap(rawAdmin.flush(tableName, columnFamily));
+  }
+
+  @Override
   public CompletableFuture<Void> flushRegion(byte[] regionName) {
     return wrap(rawAdmin.flushRegion(regionName));
+  }
+
+  @Override
+  public CompletableFuture<Void> flushRegion(byte[] regionName, byte[] columnFamily) {
+    return wrap(rawAdmin.flushRegion(regionName, columnFamily));
   }
 
   @Override
@@ -699,8 +709,8 @@ class AsyncHBaseAdmin implements AsyncAdmin {
   }
 
   @Override
-  public CompletableFuture<Boolean> normalize() {
-    return wrap(rawAdmin.normalize());
+  public CompletableFuture<Boolean> normalize(NormalizeTableFilterParams ntfp) {
+    return wrap(rawAdmin.normalize(ntfp));
   }
 
   @Override
@@ -912,5 +922,16 @@ class AsyncHBaseAdmin implements AsyncAdmin {
   @Override
   public CompletableFuture<Void> setRSGroup(Set<TableName> tables, String groupName) {
     return wrap(rawAdmin.setRSGroup(tables, groupName));
+  }
+
+  @Override
+  public CompletableFuture<Void> renameRSGroup(String oldName, String newName) {
+    return wrap(rawAdmin.renameRSGroup(oldName, newName));
+  }
+
+  @Override
+  public CompletableFuture<Void>
+    updateRSGroupConfig(String groupName, Map<String, String> configuration) {
+    return wrap(rawAdmin.updateRSGroupConfig(groupName, configuration));
   }
 }

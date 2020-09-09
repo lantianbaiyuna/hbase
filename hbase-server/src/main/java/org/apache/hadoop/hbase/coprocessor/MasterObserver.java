@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.coprocessor;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.hbase.ClusterMetrics;
 import org.apache.hadoop.hbase.HBaseInterfaceAudience;
@@ -1339,6 +1340,44 @@ public interface MasterObserver {
    */
   default void postListTablesInRSGroup(final ObserverContext<MasterCoprocessorEnvironment> ctx,
     final String groupName) throws IOException {}
+
+  /**
+   * Called before rename rsgroup.
+   * @param ctx the environment to interact with the framework and master
+   * @param oldName old rsgroup name
+   * @param newName new rsgroup name
+   */
+  default void preRenameRSGroup(final ObserverContext<MasterCoprocessorEnvironment> ctx,
+    final String oldName, final String newName) throws IOException {}
+
+  /**
+   * Called after rename rsgroup.
+   * @param ctx the environment to interact with the framework and master
+   * @param oldName old rsgroup name
+   * @param newName new rsgroup name
+   */
+  default void postRenameRSGroup(final ObserverContext<MasterCoprocessorEnvironment> ctx,
+    final String oldName, final String newName) throws IOException {}
+
+  /**
+   * Called before update rsgroup config.
+   * @param ctx the environment to interact with the framework and master
+   * @param groupName the group name
+   * @param configuration new configuration of the group name to be set
+   */
+  default void preUpdateRSGroupConfig(final ObserverContext<MasterCoprocessorEnvironment> ctx,
+                                final String groupName, final Map<String, String> configuration)
+      throws IOException {}
+
+  /**
+   * Called after update rsgroup config.
+   * @param ctx the environment to interact with the framework and master
+   * @param groupName the group name
+   * @param configuration new configuration of the group name to be set
+   */
+  default void postUpdateRSGroupConfig(final ObserverContext<MasterCoprocessorEnvironment> ctx,
+                                 final String groupName, final Map<String, String> configuration)
+      throws IOException {}
 
   /**
    * Called before getting the configured namespaces and tables in the region server group.

@@ -28,10 +28,11 @@ import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.CatalogFamilyFormat;
+import org.apache.hadoop.hbase.ClientMetaTableAccessor;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -57,8 +58,8 @@ import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
 import org.apache.hadoop.hbase.procedure2.ProcedureExecutor;
 import org.apache.hadoop.hbase.regionserver.HRegionFileSystem;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.hadoop.hbase.util.Threads;
@@ -161,13 +162,16 @@ public class CatalogJanitor extends ScheduledChore {
    * Run janitorial scan of catalog <code>hbase:meta</code> table looking for
    * garbage to collect.
    * @return How many items gc'd whether for merge or split.
+   *   Returns -1 if previous scan is in progress.
    */
-  int scan() throws IOException {
+  @VisibleForTesting
+  public int scan() throws IOException {
     int gcs = 0;
     try {
       if (!alreadyRunning.compareAndSet(false, true)) {
         LOG.debug("CatalogJanitor already running");
-        return gcs;
+        // -1 indicates previous scan is in progress
+        return -1;
       }
       this.lastReport = scanForReport();
       if (!this.lastReport.isEmpty()) {
@@ -185,7 +189,7 @@ public class CatalogJanitor extends ScheduledChore {
           break;
         }
 
-        List<RegionInfo> parents = MetaTableAccessor.getMergeRegions(e.getValue().rawCells());
+        List<RegionInfo> parents = CatalogFamilyFormat.getMergeRegions(e.getValue().rawCells());
         if (parents != null && cleanMergeRegion(e.getKey(), parents)) {
           gcs++;
         }
@@ -248,7 +252,7 @@ public class CatalogJanitor extends ScheduledChore {
       throws IOException {
     FileSystem fs = this.services.getMasterFileSystem().getFileSystem();
     Path rootdir = this.services.getMasterFileSystem().getRootDir();
-    Path tabledir = FSUtils.getTableDir(rootdir, mergedRegion.getTable());
+    Path tabledir = CommonFSUtils.getTableDir(rootdir, mergedRegion.getTable());
     TableDescriptor htd = getDescriptor(mergedRegion.getTable());
     HRegionFileSystem regionFs = null;
     try {
@@ -319,7 +323,7 @@ public class CatalogJanitor extends ScheduledChore {
   boolean cleanParent(final RegionInfo parent, Result rowContent)
   throws IOException {
     // Check whether it is a merged region and if it is clean of references.
-    if (MetaTableAccessor.hasMergeRegions(rowContent.rawCells())) {
+    if (CatalogFamilyFormat.hasMergeRegions(rowContent.rawCells())) {
       // Wait until clean of merge parent regions first
       return false;
     }
@@ -373,14 +377,14 @@ public class CatalogJanitor extends ScheduledChore {
 
     FileSystem fs = this.services.getMasterFileSystem().getFileSystem();
     Path rootdir = this.services.getMasterFileSystem().getRootDir();
-    Path tabledir = FSUtils.getTableDir(rootdir, daughter.getTable());
+    Path tabledir = CommonFSUtils.getTableDir(rootdir, daughter.getTable());
 
     Path daughterRegionDir = new Path(tabledir, daughter.getEncodedName());
 
     HRegionFileSystem regionFs;
 
     try {
-      if (!FSUtils.isExists(fs, daughterRegionDir)) {
+      if (!CommonFSUtils.isExists(fs, daughterRegionDir)) {
         return new Pair<>(Boolean.FALSE, Boolean.FALSE);
       }
     } catch (IOException ioe) {
@@ -410,22 +414,6 @@ public class CatalogJanitor extends ScheduledChore {
 
   private TableDescriptor getDescriptor(final TableName tableName) throws IOException {
     return this.services.getTableDescriptors().get(tableName);
-  }
-
-  /**
-   * Checks if the specified region has merge qualifiers, if so, try to clean them.
-   * @return true if no info:merge* columns; i.e. the specified region doesn't have
-   *   any merge qualifiers.
-   */
-  public boolean cleanMergeQualifier(final RegionInfo region) throws IOException {
-    // Get merge regions if it is a merged region and already has merge qualifier
-    List<RegionInfo> parents = MetaTableAccessor.getMergeRegions(this.services.getConnection(),
-        region.getRegionName());
-    if (parents == null || parents.isEmpty()) {
-      // It doesn't have merge qualifier, no need to clean
-      return true;
-    }
-    return cleanMergeRegion(region, parents);
   }
 
   /**
@@ -471,6 +459,10 @@ public class CatalogJanitor extends ScheduledChore {
      */
     public List<Pair<RegionInfo, RegionInfo>> getOverlaps() {
       return this.overlaps;
+    }
+
+    public Map<RegionInfo, Result> getMergedRegions() {
+      return this.mergedRegions;
     }
 
     public List<Pair<RegionInfo, ServerName>> getUnknownServers() {
@@ -530,7 +522,7 @@ public class CatalogJanitor extends ScheduledChore {
    * generate more report. Report is NOT ready until after this visitor has been
    * {@link #close()}'d.
    */
-  static class ReportMakingVisitor implements MetaTableAccessor.CloseableVisitor {
+  static class ReportMakingVisitor implements ClientMetaTableAccessor.CloseableVisitor {
     private final MasterServices services;
     private volatile boolean closed;
 
@@ -588,7 +580,7 @@ public class CatalogJanitor extends ScheduledChore {
         if (regionInfo.isSplitParent()) { // splitParent means split and offline.
           this.report.splitParents.put(regionInfo, r);
         }
-        if (MetaTableAccessor.hasMergeRegions(r.rawCells())) {
+        if (CatalogFamilyFormat.hasMergeRegions(r.rawCells())) {
           this.report.mergedRegions.put(regionInfo, r);
         }
       }
@@ -608,10 +600,10 @@ public class CatalogJanitor extends ScheduledChore {
       // If locations is null, ensure the regioninfo is for sure empty before progressing.
       // If really empty, report as missing regioninfo!  Otherwise, can run server check
       // and get RegionInfo from locations.
-      RegionLocations locations = MetaTableAccessor.getRegionLocations(metaTableRow);
+      RegionLocations locations = CatalogFamilyFormat.getRegionLocations(metaTableRow);
       if (locations == null) {
-        ri = MetaTableAccessor.getRegionInfo(metaTableRow,
-            MetaTableAccessor.getRegionInfoColumn());
+        ri = CatalogFamilyFormat.getRegionInfo(metaTableRow,
+            HConstants.REGIONINFO_QUALIFIER);
       } else {
         ri = locations.getDefaultRegionLocation().getRegion();
         checkServer(locations);
@@ -635,12 +627,17 @@ public class CatalogJanitor extends ScheduledChore {
       // If table is disabled, skip integrity check.
       if (!isTableDisabled(ri)) {
         if (isTableTransition(ri)) {
-          // On table transition, look to see if last region was last in table
-          // and if this is the first. Report 'hole' if neither is true.
           // HBCK1 used to have a special category for missing start or end keys.
           // We'll just lump them in as 'holes'.
-          if ((this.previous != null && !this.previous.isLast()) || !ri.isFirst()) {
-            addHole(this.previous == null? RegionInfo.UNDEFINED: this.previous, ri);
+
+          // This is a table transition. If this region is not first region, report a hole.
+          if (!ri.isFirst()) {
+            addHole(RegionInfo.UNDEFINED, ri);
+          }
+          // This is a table transition. If last region was not last region of previous table,
+          // report a hole
+          if (this.previous != null && !this.previous.isLast()) {
+            addHole(this.previous, RegionInfo.UNDEFINED);
           }
         } else {
           if (!this.previous.isNext(ri)) {
@@ -649,7 +646,12 @@ public class CatalogJanitor extends ScheduledChore {
             } else if (ri.isOverlap(this.highestEndKeyRegionInfo)) {
               // We may have seen a region a few rows back that overlaps this one.
               addOverlap(this.highestEndKeyRegionInfo, ri);
-            } else {
+            } else if (!this.highestEndKeyRegionInfo.isNext(ri)) {
+              // Need to check the case if this.highestEndKeyRegionInfo.isNext(ri). If no,
+              // report a hole, otherwise, it is ok. For an example,
+              // previous: [aa, bb), ri: [cc, dd), highestEndKeyRegionInfo: [a, cc)
+              // In this case, it should not report a hole, as highestEndKeyRegionInfo covers
+              // the hole between previous and ri.
               addHole(this.previous, ri);
             }
           } else if (ri.isOverlap(this.highestEndKeyRegionInfo)) {

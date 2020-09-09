@@ -1,5 +1,4 @@
-/**
- *
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -44,6 +43,7 @@ import org.apache.hadoop.hbase.client.CompactType;
 import org.apache.hadoop.hbase.client.CompactionState;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.LogQueryFilter;
+import org.apache.hadoop.hbase.client.NormalizeTableFilterParams;
 import org.apache.hadoop.hbase.client.OnlineLogRecord;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.SnapshotDescription;
@@ -474,9 +474,19 @@ public class ThriftAdmin implements Admin {
   }
 
   @Override
+  public void flush(TableName tableName, byte[] columnFamily) {
+    throw new NotImplementedException("flush not supported in ThriftAdmin");
+  }
+
+  @Override
   public void flushRegion(byte[] regionName) {
     throw new NotImplementedException("flushRegion not supported in ThriftAdmin");
 
+  }
+
+  @Override
+  public void flushRegion(byte[] regionName, byte[] columnFamily) {
+    throw new NotImplementedException("flushRegion not supported in ThriftAdmin");
   }
 
   @Override
@@ -629,7 +639,7 @@ public class ThriftAdmin implements Admin {
   }
 
   @Override
-  public boolean normalize() {
+  public boolean normalize(NormalizeTableFilterParams ntfp) {
     throw new NotImplementedException("normalize not supported in ThriftAdmin");
   }
 
@@ -1257,4 +1267,14 @@ public class ThriftAdmin implements Admin {
     throw new NotImplementedException("setRSGroup not supported in ThriftAdmin");
   }
 
+  @Override
+  public void renameRSGroup(String oldName, String newName) throws IOException {
+    throw new NotImplementedException("renameRSGroup not supported in ThriftAdmin");
+  }
+
+  @Override
+  public void updateRSGroupConfig(String groupName, Map<String, String> configuration)
+      throws IOException {
+    throw new NotImplementedException("updateRSGroupConfig not supported in ThriftAdmin");
+  }
 }

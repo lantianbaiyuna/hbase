@@ -66,6 +66,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.yetus.audience.InterfaceAudience;
 
+import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
+
 /**
  * The administrative API for HBase. Obtain an instance from {@link Connection#getAdmin()} and
  * call {@link #close()} when done.
@@ -512,12 +514,31 @@ public interface Admin extends Abortable, Closeable {
   void flush(TableName tableName) throws IOException;
 
   /**
+   * Flush the specified column family stores on all regions of the passed table.
+   * This runs as a synchronous operation.
+   *
+   * @param tableName table to flush
+   * @param columnFamily column family within a table
+   * @throws IOException if a remote or network exception occurs
+   */
+  void flush(TableName tableName, byte[] columnFamily) throws IOException;
+
+  /**
    * Flush an individual region. Synchronous operation.
    *
    * @param regionName region to flush
    * @throws IOException if a remote or network exception occurs
    */
   void flushRegion(byte[] regionName) throws IOException;
+
+  /**
+   * Flush a column family within a region. Synchronous operation.
+   *
+   * @param regionName region to flush
+   * @param columnFamily column family within a region
+   * @throws IOException if a remote or network exception occurs
+   */
+  void flushRegion(byte[] regionName, byte[] columnFamily) throws IOException;
 
   /**
    * Flush all regions on the region server. Synchronous operation.
@@ -831,11 +852,28 @@ public interface Admin extends Abortable, Closeable {
 
   /**
    * Invoke region normalizer. Can NOT run for various reasons.  Check logs.
+   * This is a non-blocking invocation to region normalizer. If return value is true, it means
+   * the request was submitted successfully. We need to check logs for the details of which regions
+   * were split/merged.
    *
-   * @return <code>true</code> if region normalizer ran, <code>false</code> otherwise.
+   * @return {@code true} if region normalizer ran, {@code false} otherwise.
    * @throws IOException if a remote or network exception occurs
    */
-  boolean normalize() throws IOException;
+  default boolean normalize() throws IOException {
+    return normalize(new NormalizeTableFilterParams.Builder().build());
+  }
+
+  /**
+   * Invoke region normalizer. Can NOT run for various reasons.  Check logs.
+   * This is a non-blocking invocation to region normalizer. If return value is true, it means
+   * the request was submitted successfully. We need to check logs for the details of which regions
+   * were split/merged.
+   *
+   * @param ntfp limit to tables matching the specified filter.
+   * @return {@code true} if region normalizer ran, {@code false} otherwise.
+   * @throws IOException if a remote or network exception occurs
+   */
+  boolean normalize(NormalizeTableFilterParams ntfp) throws IOException;
 
   /**
    * Query the current state of the region normalizer.
@@ -865,7 +903,7 @@ public interface Admin extends Abortable, Closeable {
   /**
    * Ask for a scan of the catalog table.
    *
-   * @return the number of entries cleaned
+   * @return the number of entries cleaned. Returns -1 if previous run is in progress.
    * @throws IOException if a remote or network exception occurs
    */
   int runCatalogJanitor() throws IOException;
@@ -1064,7 +1102,28 @@ public interface Admin extends Abortable, Closeable {
    * @throws IOException if a remote or network exception occurs
    */
   default Collection<ServerName> getRegionServers() throws IOException {
-    return getClusterMetrics(EnumSet.of(Option.SERVERS_NAME)).getServersName();
+    return getRegionServers(false);
+  }
+
+  /**
+   * Retrieve all current live region servers including decommissioned
+   * if excludeDecommissionedRS is false, else non-decommissioned ones only
+   *
+   * @param excludeDecommissionedRS should we exclude decommissioned RS nodes
+   * @return all current live region servers including/excluding decommissioned hosts
+   * @throws IOException if a remote or network exception occurs
+   */
+  default Collection<ServerName> getRegionServers(boolean excludeDecommissionedRS)
+      throws IOException {
+    List<ServerName> allServers =
+      getClusterMetrics(EnumSet.of(Option.SERVERS_NAME)).getServersName();
+    if (!excludeDecommissionedRS) {
+      return allServers;
+    }
+    List<ServerName> decommissionedRegionServers = listDecommissionedRegionServers();
+    return allServers.stream()
+      .filter(s -> !decommissionedRegionServers.contains(s))
+      .collect(ImmutableList.toImmutableList());
   }
 
   /**
@@ -2396,4 +2455,21 @@ public interface Admin extends Abortable, Closeable {
    * @throws IOException if a remote or network exception occurs
    */
   boolean balanceRSGroup(String groupName) throws IOException;
+
+  /**
+   * Rename rsgroup
+   * @param oldName old rsgroup name
+   * @param newName new rsgroup name
+   * @throws IOException if a remote or network exception occurs
+   */
+  void renameRSGroup(String oldName, String newName) throws IOException;
+
+  /**
+   * Update RSGroup configuration
+   * @param groupName the group name
+   * @param configuration new configuration of the group name to be set
+   * @throws IOException if a remote or network exception occurs
+   */
+  void updateRSGroupConfig(String groupName, Map<String, String> configuration) throws IOException;
+
 }

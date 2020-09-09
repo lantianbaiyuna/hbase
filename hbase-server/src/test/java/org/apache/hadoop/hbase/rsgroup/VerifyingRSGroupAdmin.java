@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.client.CompactType;
 import org.apache.hadoop.hbase.client.CompactionState;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.NormalizeTableFilterParams;
 import org.apache.hadoop.hbase.client.OnlineLogRecord;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
@@ -220,8 +221,16 @@ public class VerifyingRSGroupAdmin implements Admin, Closeable {
     admin.flush(tableName);
   }
 
+  public void flush(TableName tableName, byte[] columnFamily) throws IOException {
+    admin.flush(tableName, columnFamily);
+  }
+
   public void flushRegion(byte[] regionName) throws IOException {
     admin.flushRegion(regionName);
+  }
+
+  public void flushRegion(byte[] regionName, byte[] columnFamily) throws IOException {
+    admin.flushRegion(regionName, columnFamily);
   }
 
   public void flushRegionServer(ServerName serverName) throws IOException {
@@ -333,8 +342,9 @@ public class VerifyingRSGroupAdmin implements Admin, Closeable {
     return admin.clearBlockCache(tableName);
   }
 
-  public boolean normalize() throws IOException {
-    return admin.normalize();
+  @Override
+  public boolean normalize(NormalizeTableFilterParams ntfp) throws IOException {
+    return admin.normalize(ntfp);
   }
 
   public boolean isNormalizerEnabled() throws IOException {
@@ -814,6 +824,19 @@ public class VerifyingRSGroupAdmin implements Admin, Closeable {
 
   public boolean balanceRSGroup(String groupName) throws IOException {
     return admin.balanceRSGroup(groupName);
+  }
+
+  @Override
+  public void renameRSGroup(String oldName, String newName) throws IOException {
+    admin.renameRSGroup(oldName, newName);
+    verify();
+  }
+
+  @Override
+  public void updateRSGroupConfig(String groupName, Map<String, String> configuration)
+      throws IOException {
+    admin.updateRSGroupConfig(groupName, configuration);
+    verify();
   }
 
   private void verify() throws IOException {

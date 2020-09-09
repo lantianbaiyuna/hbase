@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -303,10 +303,26 @@ public interface AsyncAdmin {
   CompletableFuture<Void> flush(TableName tableName);
 
   /**
+   * Flush the specified column family stores on all regions of the passed table.
+   * This runs as a synchronous operation.
+   * @param tableName table to flush
+   * @param columnFamily column family within a table
+   */
+  CompletableFuture<Void> flush(TableName tableName, byte[] columnFamily);
+
+  /**
    * Flush an individual region.
    * @param regionName region to flush
    */
   CompletableFuture<Void> flushRegion(byte[] regionName);
+
+  /**
+   * Flush a column family within a region.
+   * @param regionName region to flush
+   * @param columnFamily column family within a region. If not present, flush the region's all
+   *          column families.
+   */
+  CompletableFuture<Void> flushRegion(byte[] regionName, byte[] columnFamily);
 
   /**
    * Flush all region on the region server.
@@ -1263,7 +1279,17 @@ public interface AsyncAdmin {
    * @return true if region normalizer ran, false otherwise. The return value will be wrapped by a
    *         {@link CompletableFuture}
    */
-  CompletableFuture<Boolean> normalize();
+  default CompletableFuture<Boolean> normalize() {
+    return normalize(new NormalizeTableFilterParams.Builder().build());
+  }
+
+  /**
+   * Invoke region normalizer. Can NOT run for various reasons. Check logs.
+   * @param ntfp limit to tables matching the specified filter.
+   * @return true if region normalizer ran, false otherwise. The return value will be wrapped by a
+   *         {@link CompletableFuture}
+   */
+  CompletableFuture<Boolean> normalize(NormalizeTableFilterParams ntfp);
 
   /**
    * Turn the cleaner chore on/off.
@@ -1631,4 +1657,20 @@ public interface AsyncAdmin {
    * @throws IOException if a remote or network exception occurs
    */
   CompletableFuture<Boolean> balanceRSGroup(String groupName);
+
+  /**
+   * Rename rsgroup
+   * @param oldName old rsgroup name
+   * @param newName new rsgroup name
+   * @throws IOException if a remote or network exception occurs
+   */
+  CompletableFuture<Void> renameRSGroup(String oldName, String newName);
+
+  /**
+   * Update RSGroup configuration
+   * @param groupName the group name
+   * @param configuration new configuration of the group name to be set
+   * @throws IOException if a remote or network exception occurs
+   */
+  CompletableFuture<Void> updateRSGroupConfig(String groupName, Map<String, String> configuration);
 }

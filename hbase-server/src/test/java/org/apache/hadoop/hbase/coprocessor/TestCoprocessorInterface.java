@@ -38,9 +38,9 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HBaseClassTestRule;
-import org.apache.hadoop.hbase.HBaseTestCase;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTestConst;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Get;
@@ -52,7 +52,7 @@ import org.apache.hadoop.hbase.regionserver.ChunkCreator;
 import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.MemStoreLABImpl;
+import org.apache.hadoop.hbase.regionserver.MemStoreLAB;
 import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -295,7 +295,7 @@ public class TestCoprocessorInterface {
     HRegion region = initHRegion(tableName, name.getMethodName(), hc, new Class<?>[]{}, families);
 
     for (int i = 0; i < 3; i++) {
-      HBaseTestCase.addContent(region, fam3);
+      HTestConst.addContent(region, fam3);
       region.flush(true);
     }
 
@@ -357,7 +357,7 @@ public class TestCoprocessorInterface {
     HRegion region = initHRegion(tableName, name.getMethodName(), hc,
       new Class<?>[]{CoprocessorImpl.class}, families);
     for (int i = 0; i < 3; i++) {
-      HBaseTestCase.addContent(region, fam3);
+      HTestConst.addContent(region, fam3);
       region.flush(true);
     }
 
@@ -409,23 +409,21 @@ public class TestCoprocessorInterface {
     return r;
   }
 
-  HRegion initHRegion (TableName tableName, String callingMethod,
-      Configuration conf, Class<?> [] implClasses, byte [][] families)
-      throws IOException {
-    TableDescriptorBuilder.ModifyableTableDescriptor tableDescriptor =
-      new TableDescriptorBuilder.ModifyableTableDescriptor(tableName);
+  HRegion initHRegion(TableName tableName, String callingMethod, Configuration conf,
+    Class<?>[] implClasses, byte[][] families) throws IOException {
+    TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
     for (byte[] family : families) {
-      tableDescriptor.setColumnFamily(
-        new ColumnFamilyDescriptorBuilder.ModifyableColumnFamilyDescriptor(family));
+      builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(family));
     }
-    ChunkCreator.initialize(MemStoreLABImpl.CHUNK_SIZE_DEFAULT, false, 0, 0, 0, null);
+    ChunkCreator.initialize(MemStoreLAB.CHUNK_SIZE_DEFAULT, false, 0, 0,
+      0, null, MemStoreLAB.INDEX_CHUNK_SIZE_PERCENTAGE_DEFAULT);
     RegionInfo info = RegionInfoBuilder.newBuilder(tableName)
         .setStartKey(null)
         .setEndKey(null)
         .setSplit(false)
         .build();
     Path path = new Path(DIR + callingMethod);
-    HRegion r = HBaseTestingUtility.createRegionAndWAL(info, path, conf, tableDescriptor);
+    HRegion r = HBaseTestingUtility.createRegionAndWAL(info, path, conf, builder.build());
 
     // this following piece is a hack.
     RegionCoprocessorHost host =
